@@ -1,35 +1,36 @@
-// The player ID you showed me
-const PLAYER_ID = "qIMhJcXPmOXZVSWNC6aocHuLV6J3";
+// Firebase configuration
+const firebaseConfig = {
+    apiKey: "AIzaSyDQWz5awtRuIH586AEbTpcouopE-ahsCHE",
+    authDomain: "asg1-bc97b.firebaseapp.com",
+    databaseURL: "https://asg1-bc97b-default-rtdb.asia-southeast1.firebasedatabase.app",
+    projectId: "asg1-bc97b",
+    storageBucket: "asg1-bc97b.firebasestorage.app",
+    messagingSenderId: "960117836452",
+    appId: "1:960117836452:web:3e503125332a6d9d0bf431",
+    measurementId: "G-T3FB9RQ90M"
+};
 
-const playerRef = firebase.database().ref("players/" + PLAYER_ID);
+// Initialize Firebase
+firebase.initializeApp(firebaseConfig);
+const dbRef = firebase.database().ref('players/qIMhJcXPmOXZVSWNC6aocHuLV6J3');
 
-// Realtime listener
-playerRef.on("value", snapshot => {
-    const data = snapshot.val();
+// Update dashboard UI
+function updateDashboard(data) {
+    const growth = data.growth || 0;
+    const inventoryArray = data.inventory || [];
+    const inventory = inventoryArray.join(', ') || 'Empty';
+    const lastFed = data.lastFed || 'Not fed yet';
 
-    if (!data) {
-        console.log("No player data found");
-        return;
-    }
+    document.getElementById('growth').innerText = growth;
+    document.getElementById('inventory').innerText = inventory;
+    document.getElementById('lastFed').innerText = lastFed;
+}
 
-    // Update growth
-    document.getElementById("growth").textContent = data.growth ?? "N/A";
-
-    // Update inventory
-    const invDiv = document.getElementById("inventory-list");
-    invDiv.innerHTML = "";
-
-    if (data.inventory) {
-        Object.values(data.inventory).forEach(item => {
-            const span = document.createElement("span");
-            span.textContent = item;
-            invDiv.appendChild(span);
-        });
+// Listen for changes in real-time
+dbRef.on('value', snapshot => {
+    if (snapshot.exists()) {
+        updateDashboard(snapshot.val());
     } else {
-        invDiv.textContent = "No items";
+        console.log("No data available");
     }
-
-    // Update lastFed
-    document.getElementById("lastFed").textContent =
-        data.lastFed && data.lastFed !== "" ? data.lastFed : "Never fed yet.";
 });
