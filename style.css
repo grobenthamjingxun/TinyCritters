@@ -1,83 +1,79 @@
-/* Global Styles */
+/* GENERAL STYLING */
 body {
-    font-family: 'Segoe UI', Tahoma, sans-serif;
-    background-color: #f0f2f5;
-    color: #304055;
+    font-family: 'Arial Black', Arial, sans-serif;
+    background-color: #1e1e2f; /* Dark WWF-style background */
     margin: 0;
-    padding: 0;
+    padding: 40px;
+    color: #fff;
+    text-transform: uppercase; /* ALL CAPS */
 }
 
-/* Header */
-header {
-    background-color: #304055;
-    color: #ffffff;
-    font-size: 1.8rem;
+.dashboard {
+    max-width: 600px;
+    margin: 0 auto;
     text-align: center;
-    padding: 20px 0;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
 }
 
-/* Main Dashboard Container */
-main {
-    display: flex;
-    justify-content: center;
-    align-items: flex-start;
-    padding: 40px 20px;
+h1 {
+    font-size: 3rem; /* Bigger title */
+    font-weight: 900;
+    color: #00bf63; /* WWF style highlight green */
+    margin-bottom: 40px;
+    letter-spacing: 2px;
 }
 
-/* Card Styles */
-.dashboard-card {
-    background: #ffffff;
-    width: 350px;
-    border-radius: 12px;
-    box-shadow: 0 8px 20px rgba(0,0,0,0.15);
+/* CARD STYLING */
+.card {
+    background-color: #304055; /* Dark blue card */
+    border-radius: 20px;
+    box-shadow: 0px 12px 35px rgba(0, 0, 0, 0.5);
     overflow: hidden;
-    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
 }
 
-.dashboard-card:hover {
-    transform: translateY(-5px);
-    box-shadow: 0 12px 25px rgba(0,0,0,0.2);
+.card:hover {
+    transform: translateY(-8px);
+    box-shadow: 0px 16px 45px rgba(0, 0, 0, 0.6);
 }
 
-/* Card Header */
 .card-header {
-    background-color: #304055;
+    background-color: #00bf63; /* WWF green header */
     color: #ffffff;
+    font-size: 1.5rem;
+    font-weight: 700;
     padding: 20px;
-    font-size: 1.4rem;
-    font-weight: 600;
+    letter-spacing: 1px;
 }
 
-/* Card Content */
 .card-content {
-    padding: 20px;
     display: flex;
     flex-direction: column;
     gap: 15px;
+    padding: 25px;
 }
 
-/* Individual Card Item */
 .card-item {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    background-color: #f9fafc;
-    padding: 12px 15px;
-    border-radius: 8px;
-    transition: background-color 0.2s ease;
+    padding: 15px 20px;
+    border-radius: 12px;
+    background-color: #42526e;
+    color: #ffffff;
+    font-weight: 600;
+    font-size: 1.1rem;
+    transition: background-color 0.3s ease;
 }
 
 .card-item:hover {
-    background-color: #e6f7f1; /* soft green hover */
+    background-color: #52618b;
 }
 
 .label {
-    font-weight: 500;
-    color: #304055;
+    font-weight: 700;
 }
 
 .value {
-    font-weight: 700;
-    color: #00bf63; /* green for values */
+    color: #00bf63;
+    font-weight: 800;
 }

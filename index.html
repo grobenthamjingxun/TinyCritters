@@ -3,36 +3,39 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Pangolin Dashboard</title>
+    <title>PANGOLIN DASHBOARD</title>
     <link rel="stylesheet" href="style.css">
-    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 </head>
 <body>
-    <header>Pangolin Dashboard</header>
-
-    <main>
-        <div class="dashboard-card">
+    <div class="dashboard">
+        <h1>PANGOLIN PLAYER DASHBOARD</h1>
+        <div class="card">
             <div class="card-header">
-                <h2>Player Info</h2>
+                <span>PLAYER INFO</span>
             </div>
             <div class="card-content">
                 <div class="card-item">
-                    <span class="label">Growth</span>
-                    <span class="value" id="growth">Loading...</span>
+                    <span class="label">PLAYER ID</span>
+                    <span class="value" id="playerId">LOADING...</span>
                 </div>
                 <div class="card-item">
-                    <span class="label">Inventory</span>
-                    <span class="value" id="inventory">Loading...</span>
+                    <span class="label">GROWTH</span>
+                    <span class="value" id="growth">LOADING...</span>
                 </div>
                 <div class="card-item">
-                    <span class="label">Last Fed</span>
-                    <span class="value" id="lastFed">Loading...</span>
+                    <span class="label">INVENTORY</span>
+                    <span class="value" id="inventory">LOADING...</span>
+                </div>
+                <div class="card-item">
+                    <span class="label">LAST FED</span>
+                    <span class="value" id="lastFed">LOADING...</span>
                 </div>
             </div>
         </div>
-    </main>
+    </div>
 
+    <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-database-compat.js"></script>
     <script src="dashboard.js"></script>
 </body>
 </html>
