@@ -1,7 +1,3 @@
-Absolutely! Here’s a professional and detailed **README** for your Pangolin Dashboard project:
-
----
-
 # Pangolin Player Dashboard
 
 ## Overview
