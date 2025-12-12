@@ -1,41 +1,71 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PANGOLIN DASHBOARD</title>
-    <link rel="stylesheet" href="style.css">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pangolin Dashboard</title>
+<link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <div class="dashboard">
-        <h1>PANGOLIN PLAYER DASHBOARD</h1>
-        <div class="card">
-            <div class="card-header">
-                <span>PLAYER INFO</span>
-            </div>
-            <div class="card-content">
-                <div class="card-item">
-                    <span class="label">PLAYER ID</span>
-                    <span class="value" id="playerId">LOADING...</span>
-                </div>
-                <div class="card-item">
-                    <span class="label">GROWTH</span>
-                    <span class="value" id="growth">LOADING...</span>
-                </div>
-                <div class="card-item">
-                    <span class="label">INVENTORY</span>
-                    <span class="value" id="inventory">LOADING...</span>
-                </div>
-                <div class="card-item">
-                    <span class="label">LAST FED</span>
-                    <span class="value" id="lastFed">LOADING...</span>
-                </div>
-            </div>
-        </div>
-    </div>
 
-    <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-database-compat.js"></script>
-    <script src="dashboard.js"></script>
+<div class="dashboard">
+  <h1>PANGOLIN PLAYER DASHBOARD</h1>
+  <div id="dashboard-container"></div>
+</div>
+
+<!-- Firebase SDK -->
+<script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-database-compat.js"></script>
+
+<script>
+  const firebaseConfig = {
+    apiKey: "AIzaSyDQWz5awtRuIH586AEbTpcouopE-ahsCHE",
+    authDomain: "asg1-bc97b.firebaseapp.com",
+    databaseURL: "https://asg1-bc97b-default-rtdb.asia-southeast1.firebasedatabase.app",
+    projectId: "asg1-bc97b",
+    storageBucket: "asg1-bc97b.firebasestorage.app",
+    messagingSenderId: "960117836452",
+    appId: "1:960117836452:web:3e503125332a6d9d0bf431",
+    measurementId: "G-T3FB9RQ90M"
+  };
+
+  firebase.initializeApp(firebaseConfig);
+  const dbRef = firebase.database().ref('pangolins');
+  const container = document.getElementById('dashboard-container');
+
+  dbRef.on('value', snapshot => {
+    container.innerHTML = ''; // Clear previous cards
+
+    if (!snapshot.exists()) {
+      container.innerHTML = '<p>No pangolins found in the database.</p>';
+      return;
+    }
+
+    snapshot.forEach(pangolinSnap => {
+      const pangolin = pangolinSnap.val();
+      const id = pangolinSnap.key;
+
+      const lastFed = pangolin.lastFed ? new Date(pangolin.lastFed).toLocaleString() : 'NOT FED YET';
+      const growthStage = pangolin.growthStage || 'N/A';
+      const happiness = pangolin.happiness !== undefined ? pangolin.happiness : 'N/A';
+      const hunger = pangolin.hunger !== undefined ? pangolin.hunger : 'N/A';
+
+      const card = document.createElement('div');
+      card.className = 'card';
+      card.innerHTML = `
+        <div class="card-header">${id.toUpperCase()}</div>
+        <div class="card-content">
+          <div class="card-item"><span class="label">GROWTH STAGE:</span> <span class="value">${growthStage.toUpperCase()}</span></div>
+          <div class="card-item"><span class="label">HAPPINESS:</span> <span class="value">${happiness}</span></div>
+          <div class="card-item"><span class="label">HUNGER:</span> <span class="value">${hunger}</span></div>
+          <div class="card-item"><span class="label">LAST FED:</span> <span class="value">${lastFed}</span></div>
+        </div>
+      `;
+
+      container.appendChild(card);
+    });
+  });
+</script>
+
 </body>
 </html>
