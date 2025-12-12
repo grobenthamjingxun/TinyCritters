@@ -1,71 +1,98 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Pangolin Dashboard</title>
-<link rel="stylesheet" href="style.css">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pangolin Dashboard</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-database-compat.js"></script>
 </head>
 <body>
+  <div class="dashboard">
+    <h1>PANGOLIN PLAYER DASHBOARD</h1>
+    <div id="pangolinContainer"></div>
+  </div>
 
-<div class="dashboard">
-  <h1>PANGOLIN PLAYER DASHBOARD</h1>
-  <div id="dashboard-container"></div>
-</div>
+  <script>
+    // Firebase config
+    const firebaseConfig = {
+      apiKey: "AIzaSyDQWz5awtRuIH586AEbTpcouopE-ahsCHE",
+      authDomain: "asg1-bc97b.firebaseapp.com",
+      databaseURL: "https://asg1-bc97b-default-rtdb.asia-southeast1.firebasedatabase.app",
+      projectId: "asg1-bc97b",
+      storageBucket: "asg1-bc97b.appspot.com",
+      messagingSenderId: "960117836452",
+      appId: "1:960117836452:web:3e503125332a6d9d0bf431",
+      measurementId: "G-T3FB9RQ90M"
+    };
 
-<!-- Firebase SDK -->
-<script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-database-compat.js"></script>
+    // Initialize Firebase
+    const app = firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
+    const pangolinsRef = db.ref('pangolins');
+    const container = document.getElementById('pangolinContainer');
 
-<script>
-  const firebaseConfig = {
-    apiKey: "AIzaSyDQWz5awtRuIH586AEbTpcouopE-ahsCHE",
-    authDomain: "asg1-bc97b.firebaseapp.com",
-    databaseURL: "https://asg1-bc97b-default-rtdb.asia-southeast1.firebasedatabase.app",
-    projectId: "asg1-bc97b",
-    storageBucket: "asg1-bc97b.firebasestorage.app",
-    messagingSenderId: "960117836452",
-    appId: "1:960117836452:web:3e503125332a6d9d0bf431",
-    measurementId: "G-T3FB9RQ90M"
-  };
+    // Admin flag
+    const isAdmin = true; // Change to false if not admin
 
-  firebase.initializeApp(firebaseConfig);
-  const dbRef = firebase.database().ref('pangolins');
-  const container = document.getElementById('dashboard-container');
-
-  dbRef.on('value', snapshot => {
-    container.innerHTML = ''; // Clear previous cards
-
-    if (!snapshot.exists()) {
-      container.innerHTML = '<p>No pangolins found in the database.</p>';
-      return;
+    // Function to remove pangolin
+    function removePangolin(id) {
+      if (!confirm(`Are you sure you want to delete pangolin ${id}?`)) return;
+      pangolinsRef.child(id).remove()
+        .then(() => alert(`Pangolin ${id} removed successfully.`))
+        .catch(err => console.error("Error removing pangolin:", err));
     }
 
-    snapshot.forEach(pangolinSnap => {
-      const pangolin = pangolinSnap.val();
-      const id = pangolinSnap.key;
+    // Listen for changes in pangolins
+    pangolinsRef.on('value', snapshot => {
+      container.innerHTML = ''; // Clear existing cards
 
-      const lastFed = pangolin.lastFed ? new Date(pangolin.lastFed).toLocaleString() : 'NOT FED YET';
-      const growthStage = pangolin.growthStage || 'N/A';
-      const happiness = pangolin.happiness !== undefined ? pangolin.happiness : 'N/A';
-      const hunger = pangolin.hunger !== undefined ? pangolin.hunger : 'N/A';
+      if (!snapshot.exists()) {
+        container.innerHTML = '<p>No pangolins found in the database.</p>';
+        return;
+      }
 
-      const card = document.createElement('div');
-      card.className = 'card';
-      card.innerHTML = `
-        <div class="card-header">${id.toUpperCase()}</div>
-        <div class="card-content">
-          <div class="card-item"><span class="label">GROWTH STAGE:</span> <span class="value">${growthStage.toUpperCase()}</span></div>
-          <div class="card-item"><span class="label">HAPPINESS:</span> <span class="value">${happiness}</span></div>
-          <div class="card-item"><span class="label">HUNGER:</span> <span class="value">${hunger}</span></div>
-          <div class="card-item"><span class="label">LAST FED:</span> <span class="value">${lastFed}</span></div>
-        </div>
-      `;
+      snapshot.forEach(pangolinSnap => {
+        const pangolin = pangolinSnap.val();
+        const id = pangolinSnap.key;
 
-      container.appendChild(card);
+        const lastFed = pangolin.lastFed ? new Date(pangolin.lastFed).toLocaleString() : 'NOT FED YET';
+        const growthStage = pangolin.growthStage || 'N/A';
+        const happiness = pangolin.happiness !== undefined ? pangolin.happiness : 'N/A';
+        const hunger = pangolin.hunger !== undefined ? pangolin.hunger : 'N/A';
+
+        const card = document.createElement('div');
+        card.className = 'card';
+        card.innerHTML = `
+          <div class="card-header">${id.toUpperCase()}</div>
+          <div class="card-content">
+            <div class="card-item"><span class="label">GROWTH STAGE:</span> <span class="value">${growthStage.toUpperCase()}</span></div>
+            <div class="card-item"><span class="label">HAPPINESS:</span> <span class="value">${happiness}</span></div>
+            <div class="card-item"><span class="label">HUNGER:</span> <span class="value">${hunger}</span></div>
+            <div class="card-item"><span class="label">LAST FED:</span> <span class="value">${lastFed}</span></div>
+          </div>
+        `;
+
+        // Add delete button if admin
+        if (isAdmin) {
+          const deleteBtn = document.createElement('button');
+          deleteBtn.textContent = 'REMOVE';
+          deleteBtn.style.margin = '15px';
+          deleteBtn.style.padding = '8px 16px';
+          deleteBtn.style.border = 'none';
+          deleteBtn.style.borderRadius = '8px';
+          deleteBtn.style.backgroundColor = '#bf0000';
+          deleteBtn.style.color = '#fff';
+          deleteBtn.style.fontWeight = '700';
+          deleteBtn.style.cursor = 'pointer';
+          deleteBtn.onclick = () => removePangolin(id);
+          card.appendChild(deleteBtn);
+        }
+
+        container.appendChild(card);
+      });
     });
-  });
-</script>
-
+  </script>
 </body>
 </html>
