@@ -1,104 +1,94 @@
 using UnityEngine;
 using TMPro;
-using Firebase.Auth;
-using Firebase.Extensions;
-using System.Threading.Tasks;
+using UnityEngine.SceneManagement;
 
 public class SignUpManager : MonoBehaviour
 {
     [Header("UI References")]
     public TMP_InputField emailInput;
     public TMP_InputField passwordInput;
+
+    [Tooltip("Optional feedback text on screen")]
     public TMP_Text feedbackText;
 
-    private FirebaseAuth auth;
-
-    private void Awake()
+    private void Start()
     {
-        auth = FirebaseAuth.DefaultInstance;
-        Debug.Log("SignUpManager Awake: auth = " + (auth == null ? "NULL" : "OK"));
+        if (FirebaseManager.Instance == null)
+        {
+            Debug.LogError("[SignUpManager] No FirebaseManager in scene.");
+            SetFeedback("Firebase not ready.");
+            return;
+        }
+
+        FirebaseManager.Instance.OnSignUpCompleted += HandleSignUpCompleted;
+        FirebaseManager.Instance.OnSignUpFailed += HandleSignUpFailed;
     }
 
-    // ⚠️ This is the ONLY method your Sign Up button should call
+    private void OnDestroy()
+    {
+        if (FirebaseManager.Instance != null)
+        {
+            FirebaseManager.Instance.OnSignUpCompleted -= HandleSignUpCompleted;
+            FirebaseManager.Instance.OnSignUpFailed -= HandleSignUpFailed;
+        }
+    }
+
+    private void SetFeedback(string message)
+    {
+        Debug.Log("[SignUpManager] " + message);
+        if (feedbackText != null)
+        {
+            feedbackText.text = message;
+        }
+    }
+
     public void SignUp()
     {
-        // 1) Check all refs first so we don't crash
-        if (emailInput == null)
+        if (FirebaseManager.Instance == null)
         {
-            Debug.LogError("SignUpManager ERROR: emailInput is NOT assigned in the Inspector.");
+            Debug.LogError("[SignUpManager] FirebaseManager missing.");
+            SetFeedback("Firebase not ready.");
             return;
         }
 
-        if (passwordInput == null)
+        if (emailInput == null || passwordInput == null)
         {
-            Debug.LogError("SignUpManager ERROR: passwordInput is NOT assigned in the Inspector.");
+            Debug.LogError("[SignUpManager] Input fields not assigned.");
+            SetFeedback("Missing input fields.");
             return;
         }
 
-        if (feedbackText == null)
-        {
-            Debug.LogError("SignUpManager ERROR: feedbackText is NOT assigned in the Inspector.");
-            return;
-        }
-
-        if (auth == null)
-        {
-            Debug.LogError("SignUpManager ERROR: auth is NULL. Check Firebase initialisation.");
-            feedbackText.text = "Auth not ready. Check Firebase setup.";
-            return;
-        }
-
-        // 2) Safe to use them now
         string email = emailInput.text.Trim();
         string password = passwordInput.text;
 
         if (string.IsNullOrEmpty(email) || string.IsNullOrEmpty(password))
         {
-            feedbackText.text = "Email and password cannot be empty.";
-            Debug.LogError("Sign-Up failed: Empty input.");
+            SetFeedback("Please enter email and password.");
             return;
         }
 
         if (password.Length < 6)
         {
-            feedbackText.text = "Password must be at least 6 characters.";
-            Debug.LogError("Sign-Up failed: Password too short.");
+            SetFeedback("Password must be at least 6 characters.");
             return;
         }
 
-        feedbackText.text = "Creating account...";
-        Debug.Log("Attempting sign-up with: " + email);
+        SetFeedback("Creating account...");
+        FirebaseManager.Instance.RegisterUser(email, password);
+    }
 
-        auth.CreateUserWithEmailAndPasswordAsync(email, password)
-            .ContinueWithOnMainThread((Task<AuthResult> task) =>
-            {
-                if (task.IsCanceled)
-                {
-                    feedbackText.text = "Sign-Up canceled.";
-                    Debug.LogError("Sign-Up canceled.");
-                    return;
-                }
+    private void HandleSignUpCompleted()
+    {
+        Debug.Log("[SignUpManager] Sign-Up successful!");
+        SetFeedback("Account created!");
 
-                if (task.IsFaulted)
-                {
-                    string errorMsg = "Sign-Up failed.";
+        // Proceed to next scene
+        SceneManager.LoadScene(2);  // change if needed
+    }
 
-                    if (task.Exception != null)
-                    {
-                        var baseException = task.Exception.GetBaseException();
-                        errorMsg += " " + baseException.Message;
-                        Debug.LogError("Raw sign-up exception: " + task.Exception);
-                    }
-
-                    feedbackText.text = errorMsg;
-                    return;
-                }
-
-                AuthResult result = task.Result;
-                FirebaseUser newUser = result.User;
-
-                feedbackText.text = "Sign-Up successful! Welcome " + newUser.Email;
-                Debug.Log("Sign-Up successful: " + newUser.UserId);
-            });
+    private void HandleSignUpFailed(string error)
+    {
+        Debug.LogError("[SignUpManager] Sign-Up failed: " + error);
+        SetFeedback("Sign-Up failed: " + error);
     }
 }

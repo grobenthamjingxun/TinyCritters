@@ -1,8 +1,6 @@
 using UnityEngine;
 using TMPro;
-using Firebase.Auth;
-using Firebase.Extensions;
-using System.Threading.Tasks;
+using UnityEngine.SceneManagement;
 
 public class LoginManager : MonoBehaviour
 {
@@ -10,18 +8,31 @@ public class LoginManager : MonoBehaviour
     public TMP_InputField emailInput;
     public TMP_InputField passwordInput;
 
-    [Tooltip("Optional. Leave empty if you don't want on-screen feedback.")]
-    public TMP_Text feedbackText;   // <-- now optional
+    [Tooltip("Optional feedback text on screen")]
+    public TMP_Text feedbackText;
 
-    private FirebaseAuth auth;
-
-    private void Awake()
+    private void Start()
     {
-        auth = FirebaseAuth.DefaultInstance;
-        Debug.Log("LoginManager Awake: auth = " + (auth == null ? "NULL" : "OK"));
+        if (FirebaseManager.Instance == null)
+        {
+            Debug.LogError("[LoginManager] No FirebaseManager in scene.");
+            SetFeedback("Firebase not set up.");
+            return;
+        }
+
+        FirebaseManager.Instance.OnLoginCompleted += HandleLoginCompleted;
+        FirebaseManager.Instance.OnLoginFailed += HandleLoginFailed;
     }
 
-    // Helper: safely set feedback (logs to Console even if no TMP_Text)
+    private void OnDestroy()
+    {
+        if (FirebaseManager.Instance != null)
+        {
+            FirebaseManager.Instance.OnLoginCompleted -= HandleLoginCompleted;
+            FirebaseManager.Instance.OnLoginFailed -= HandleLoginFailed;
+        }
+    }
+
     private void SetFeedback(string message)
     {
         Debug.Log("[LoginManager] " + message);
@@ -33,23 +44,17 @@ public class LoginManager : MonoBehaviour
 
     public void Login()
     {
-        // Check required refs only (email & password)
-        if (emailInput == null)
+        if (FirebaseManager.Instance == null)
         {
-            Debug.LogError("LoginManager ERROR: emailInput is NOT assigned in the Inspector.");
+            Debug.LogError("[LoginManager] Cannot Login: FirebaseManager.Instance is null.");
+            SetFeedback("Firebase not ready.");
             return;
         }
 
-        if (passwordInput == null)
+        if (emailInput == null || passwordInput == null)
         {
-            Debug.LogError("LoginManager ERROR: passwordInput is NOT assigned in the Inspector.");
-            return;
-        }
-
-        if (auth == null)
-        {
-            SetFeedback("Auth not ready. Check Firebase setup.");
-            Debug.LogError("LoginManager ERROR: auth is NULL. Firebase not initialised?");
+            Debug.LogError("[LoginManager] Email or password input not assigned.");
+            SetFeedback("Missing input fields.");
             return;
         }
 
@@ -58,44 +63,26 @@ public class LoginManager : MonoBehaviour
 
         if (string.IsNullOrEmpty(email) || string.IsNullOrEmpty(password))
         {
-            SetFeedback("Email and password cannot be empty.");
+            SetFeedback("Please enter email and password.");
             return;
         }
 
         SetFeedback("Logging in...");
-        Debug.Log("Attempting login with: " + email);
+        FirebaseManager.Instance.LoginUser(email, password);
+    }
 
-        auth.SignInWithEmailAndPasswordAsync(email, password)
-            .ContinueWithOnMainThread((Task<AuthResult> task) =>
-            {
-                if (task.IsCanceled)
-                {
-                    SetFeedback("Login canceled.");
-                    Debug.LogError("Login canceled.");
-                    return;
-                }
+    private void HandleLoginCompleted()
+    {
+        SetFeedback("Login successful!");
 
-                if (task.IsFaulted)
-                {
-                    string errorMsg = "Login failed.";
+        // Load your main game scene (change index/name as needed)
+        Debug.Log("[LoginManager] Login successful, loading scene 5...");
+        SceneManager.LoadScene(5);
+    }
 
-                    if (task.Exception != null)
-                    {
-                        var baseException = task.Exception.GetBaseException();
-                        errorMsg += " " + baseException.Message;
-                        Debug.LogError("Raw login exception: " + task.Exception);
-                    }
-
-                    SetFeedback(errorMsg);
-                    return;
-                }
-
-                // Success
-                AuthResult result = task.Result;
-                FirebaseUser user = result.User;
-
-                SetFeedback("Login successful");
-                Debug.Log("Login successful: " + user.UserId + " (" + user.Email + ")");
-            });
+    private void HandleLoginFailed(string error)
+    {
+        Debug.LogError("[LoginManager] Login failed: " + error);
+        SetFeedback("Login failed: " + error);
     }
 }
