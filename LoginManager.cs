@@ -1,6 +1,7 @@
 using UnityEngine;
 using TMPro;
 using UnityEngine.SceneManagement;
+using System.Collections;
 
 public class LoginManager : MonoBehaviour
 {
@@ -11,49 +12,64 @@ public class LoginManager : MonoBehaviour
     [Tooltip("Optional feedback text on screen")]
     public TMP_Text feedbackText;
 
-    private void Start()
+    [Header("Scene Flow")]
+    [Tooltip("Scene index to load after successful login.")]
+    public int sceneToLoadOnSuccess = 2;
+
+    private bool _subscribed;
+    private bool _loadingScene;
+
+    private void OnEnable()
     {
-        if (FirebaseManager.Instance == null)
-        {
-            Debug.LogError("[LoginManager] No FirebaseManager in scene.");
-            SetFeedback("Firebase not set up.");
-            return;
-        }
+        StartCoroutine(SubscribeWhenReady());
+    }
+
+    private IEnumerator SubscribeWhenReady()
+    {
+        // Wait until FirebaseManager exists
+        while (FirebaseManager.Instance == null)
+            yield return null;
+
+        // Wait until Firebase is initialised
+        while (!FirebaseManager.Instance.IsReady)
+            yield return null;
+
+        if (_subscribed) yield break;
+        _subscribed = true;
 
         FirebaseManager.Instance.OnLoginCompleted += HandleLoginCompleted;
         FirebaseManager.Instance.OnLoginFailed += HandleLoginFailed;
+
+        SetFeedback("Ready to login.");
     }
 
-    private void OnDestroy()
+    private void OnDisable()
     {
-        if (FirebaseManager.Instance != null)
+        if (FirebaseManager.Instance != null && _subscribed)
         {
             FirebaseManager.Instance.OnLoginCompleted -= HandleLoginCompleted;
             FirebaseManager.Instance.OnLoginFailed -= HandleLoginFailed;
         }
+
+        _subscribed = false;
     }
 
     private void SetFeedback(string message)
     {
         Debug.Log("[LoginManager] " + message);
-        if (feedbackText != null)
-        {
-            feedbackText.text = message;
-        }
+        if (feedbackText != null) feedbackText.text = message;
     }
 
     public void Login()
     {
-        if (FirebaseManager.Instance == null)
+        if (FirebaseManager.Instance == null || !FirebaseManager.Instance.IsReady)
         {
-            Debug.LogError("[LoginManager] Cannot Login: FirebaseManager.Instance is null.");
-            SetFeedback("Firebase not ready.");
+            SetFeedback("Firebase not ready yet...");
             return;
         }
 
         if (emailInput == null || passwordInput == null)
         {
-            Debug.LogError("[LoginManager] Email or password input not assigned.");
             SetFeedback("Missing input fields.");
             return;
         }
@@ -67,22 +83,39 @@ public class LoginManager : MonoBehaviour
             return;
         }
 
+        if (_loadingScene)
+        {
+            SetFeedback("Already loading...");
+            return;
+        }
+
         SetFeedback("Logging in...");
         FirebaseManager.Instance.LoginUser(email, password);
     }
 
     private void HandleLoginCompleted()
     {
+        if (_loadingScene) return;
+        _loadingScene = true;
+
         SetFeedback("Login successful!");
 
-        // Load your main game scene (change index/name as needed)
-        Debug.Log("[LoginManager] Login successful, loading scene 5...");
-        SceneManager.LoadScene(5);
+        if (!Application.CanStreamedLevelBeLoaded(sceneToLoadOnSuccess))
+        {
+            Debug.LogError("[LoginManager] Scene index not in build settings: " + sceneToLoadOnSuccess);
+            SetFeedback("Scene not in Build Settings: " + sceneToLoadOnSuccess);
+            _loadingScene = false;
+            return;
+        }
+
+        Debug.Log("[LoginManager] Loading scene " + sceneToLoadOnSuccess + "...");
+        SceneManager.LoadScene(sceneToLoadOnSuccess);
     }
 
     private void HandleLoginFailed(string error)
     {
         Debug.LogError("[LoginManager] Login failed: " + error);
         SetFeedback("Login failed: " + error);
+        _loadingScene = false;
     }
 }

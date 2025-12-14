@@ -10,28 +10,40 @@ public class PangolinManager : MonoBehaviour
 {
     public static PangolinManager Instance;
 
-    [Header("Stats (INT)")]
+    [Header("Stats (INT 0–100)")]
     [SerializeField] private int hunger = 50;
     [SerializeField] private int happiness = 50;
     [SerializeField] private string growthStage = "egg";
 
     [Header("Firebase")]
+    [Tooltip("If true: only use Firebase when logged in. No guest fallback UID.")]
+    [SerializeField] private bool requireAuthenticatedUser = true;
+
+    [Tooltip("Only used if requireAuthenticatedUser = false.")]
     [SerializeField] private string fallbackUserId = "testUser";
+
     private DatabaseReference pangolinRef;
-    private bool loaded;
+    private bool loadedFromFirebase;
 
     [Header("Win / Fail (scene indexes)")]
     [SerializeField] private int successThreshold = 100;
     [SerializeField] private int failThreshold = 0;
-    [SerializeField] private int successSceneIndex = 1;
-    [SerializeField] private int failSceneIndex = 2;
+    [SerializeField] private int successSceneIndex = 7;
+    [SerializeField] private int failSceneIndex = 6;
 
-    [Header("Growth Scaling")]
+    [Header("Scale Growth (applied on feeding)")]
     [SerializeField] private float maxScaleMultiplier = 1.8f;
     private Vector3 baseScale;
     private float currentScaleMultiplier = 1f;
 
+    // ===== GLOW =====
     private Coroutine glowRoutine;
+    private Renderer[] cachedRenderers;
+    private MaterialPropertyBlock mpb;
+    private static readonly int EmissionColorId = Shader.PropertyToID("_EmissionColor");
+
+    // Scene-load guard
+    private bool endTriggered;
 
     private void Awake()
     {
@@ -39,52 +51,120 @@ public class PangolinManager : MonoBehaviour
         else { Destroy(gameObject); return; }
 
         baseScale = transform.localScale;
+
+        cachedRenderers = GetComponentsInChildren<Renderer>(true);
+        mpb = new MaterialPropertyBlock();
     }
 
     private void Start()
     {
-        if (FirebaseManager.Instance != null && FirebaseManager.Instance.User != null)
+        // Don’t touch Firebase until FirebaseManager is ready (prevents null-user fallback issues)
+        StartCoroutine(InitWhenFirebaseReady());
+    }
+
+    private IEnumerator InitWhenFirebaseReady()
+    {
+        // If you don’t have FirebaseManager in this scene, stop gracefully
+        if (FirebaseManager.Instance == null)
         {
-            InitFirebase(FirebaseManager.Instance.User.UserId);
+            Debug.LogWarning("[PangolinManager] No FirebaseManager found. Running local-only.");
+            UIManager.Instance?.UpdateUI(hunger, happiness, growthStage);
+            yield break;
+        }
+
+        while (!FirebaseManager.Instance.IsReady)
+            yield return null;
+
+        string uid = null;
+
+        if (FirebaseManager.Instance.User != null)
+        {
+            uid = FirebaseManager.Instance.User.UserId;
         }
         else
         {
-            InitFirebase(fallbackUserId);
+            if (requireAuthenticatedUser)
+            {
+                Debug.LogWarning("[PangolinManager] No authenticated user. Running local-only (no scene auto-fail).");
+                UIManager.Instance?.UpdateUI(hunger, happiness, growthStage);
+                yield break;
+            }
+
+            uid = fallbackUserId;
         }
+
+        pangolinRef = FirebaseDatabase.DefaultInstance.RootReference
+            .Child("pangolins")
+            .Child(uid);
+
+        Debug.Log("[PangolinManager] Firebase path: /pangolins/" + uid);
 
         LoadFromFirebase();
     }
 
-    private void InitFirebase(string uid)
-    {
-        pangolinRef = FirebaseDatabase.DefaultInstance
-            .RootReference
-            .Child("pangolins")
-            .Child(uid);
-    }
-
     private void LoadFromFirebase()
     {
+        if (pangolinRef == null) return;
+
         pangolinRef.GetValueAsync().ContinueWithOnMainThread(task =>
         {
-            loaded = true;
+            if (task.IsFaulted || task.IsCanceled)
+            {
+                Debug.LogWarning("[PangolinManager] LoadFromFirebase failed/canceled. Running with local defaults.");
+                UIManager.Instance?.UpdateUI(hunger, happiness, growthStage);
+                return;
+            }
+
+            var snap = task.Result;
+            if (snap == null || !snap.Exists)
+            {
+                Debug.Log("[PangolinManager] No existing pangolin data. Using local defaults.");
+                UIManager.Instance?.UpdateUI(hunger, happiness, growthStage);
+                loadedFromFirebase = true; // allow saving later
+                return;
+            }
+
+            hunger = ToInt(snap.Child("hunger").Value, hunger);
+            happiness = ToInt(snap.Child("happiness").Value, happiness);
+            if (snap.Child("growthStage").Value != null)
+                growthStage = snap.Child("growthStage").Value.ToString();
+
+            loadedFromFirebase = true;
+
+            UIManager.Instance?.UpdateUI(hunger, happiness, growthStage);
+
+            // Only check end conditions AFTER we have stable values
+            CheckEndConditions();
         });
     }
 
-    // ============================
-    // 🔥 MAIN ENTRY POINT
-    // ============================
-    public void ApplyItem(string itemName, int hungerDelta, int happinessDelta)
+    // =========================================================
+    // Backwards compatibility
+    // =========================================================
+    public void ApplyDelta(string itemName, int hungerDelta, int happinessDelta, bool setLastFed)
+    {
+        ApplyItem(itemName, hungerDelta, happinessDelta, setLastFed);
+    }
+
+    // =========================================================
+    // MAIN update
+    // =========================================================
+    public void ApplyItem(string itemName, int hungerDelta, int happinessDelta, bool setLastFed = false)
     {
         hunger = Mathf.Clamp(hunger + hungerDelta, 0, 100);
         happiness = Mathf.Clamp(happiness + happinessDelta, 0, 100);
         growthStage = ComputeStage(hunger, happiness);
 
+        UIManager.Instance?.UpdateUI(hunger, happiness, growthStage);
+
         CheckEndConditions();
 
-        if (!loaded) return;
+        if (!loadedFromFirebase || pangolinRef == null)
+        {
+            Debug.Log($"[PangolinManager] Local-only update: item={itemName} hΔ={hungerDelta} happyΔ={happinessDelta} fed={setLastFed}");
+            return;
+        }
 
-        // Update core stats
         var update = new Dictionary<string, object>
         {
             { "hunger", hunger },
@@ -92,43 +172,96 @@ public class PangolinManager : MonoBehaviour
             { "growthStage", growthStage }
         };
 
-        pangolinRef.UpdateChildrenAsync(update);
+        if (setLastFed)
+            update["lastFed"] = DateTime.UtcNow.ToString("o");
 
-        // 🔥 LOG EVERY ITEM
-        LogItem(itemName, hungerDelta, happinessDelta);
+        // ✅ Properly log the write result
+        pangolinRef.UpdateChildrenAsync(update).ContinueWithOnMainThread(task =>
+        {
+            if (task.IsFaulted || task.IsCanceled)
+            {
+                Debug.LogError("[PangolinManager] ❌ UpdateChildrenAsync failed: " + task.Exception);
+            }
+            else
+            {
+                Debug.Log("[PangolinManager] ✅ Updated stats in Firebase: item=" + itemName +
+                          " hungerDelta=" + hungerDelta + " happinessDelta=" + happinessDelta +
+                          " setLastFed=" + setLastFed);
+            }
+        });
+
+        LogItemToFirebase(itemName, hungerDelta, happinessDelta, setLastFed);
     }
 
-    // ============================
-    // 📝 ITEM LOGGING (ALWAYS)
-    // ============================
-    private void LogItem(string itemName, int hungerDelta, int happinessDelta)
+    private void LogItemToFirebase(string itemName, int hungerDelta, int happinessDelta, bool setLastFed)
     {
+        if (pangolinRef == null) return;
+
         string key = pangolinRef.Child("feedHistory").Push().Key;
+        if (string.IsNullOrEmpty(key)) return;
 
         var entry = new Dictionary<string, object>
         {
             { "item", itemName },
+            { "timestampUtc", DateTime.UtcNow.ToString("o") },
             { "hungerDelta", hungerDelta },
             { "happinessDelta", happinessDelta },
             { "hungerAfter", hunger },
             { "happinessAfter", happiness },
             { "growthStageAfter", growthStage },
-            { "timestampUtc", DateTime.UtcNow.ToString("o") }
+            { "countsAsFed", setLastFed }
         };
 
-        pangolinRef.Child("feedHistory").Child(key).SetValueAsync(entry);
+        // ✅ Properly log the write result
+        pangolinRef.Child("feedHistory").Child(key).SetValueAsync(entry).ContinueWithOnMainThread(task =>
+        {
+            if (task.IsFaulted || task.IsCanceled)
+            {
+                Debug.LogError("[PangolinManager] ❌ feedHistory write failed: " + task.Exception);
+            }
+            else
+            {
+                Debug.Log("[PangolinManager] ✅ feedHistory logged: " + key +
+                          " item=" + itemName +
+                          " hungerDelta=" + hungerDelta +
+                          " happinessDelta=" + happinessDelta +
+                          " countsAsFed=" + setLastFed);
+            }
+        });
     }
 
+    // =========================================================
+    // SCALE
+    // =========================================================
+    public void AddScale(float addMultiplier)
+    {
+        currentScaleMultiplier = Mathf.Clamp(currentScaleMultiplier + addMultiplier, 1f, maxScaleMultiplier);
+        transform.localScale = baseScale * currentScaleMultiplier;
+    }
+
+    // =========================================================
+    // WIN/FAIL (guarded, validated)
+    // =========================================================
     private void CheckEndConditions()
     {
-        if (hunger >= successThreshold || happiness >= successThreshold)
+        if (endTriggered) return;
+
+        bool success = hunger >= successThreshold || happiness >= successThreshold;
+        bool fail = hunger <= failThreshold || happiness <= failThreshold;
+
+        if (!success && !fail) return;
+
+        int target = success ? successSceneIndex : failSceneIndex;
+
+        if (!Application.CanStreamedLevelBeLoaded(target))
         {
-            SceneManager.LoadScene(successSceneIndex);
+            Debug.LogError("[PangolinManager] Target scene not in Build Settings: " + target);
+            return;
         }
-        else if (hunger <= failThreshold || happiness <= failThreshold)
-        {
-            SceneManager.LoadScene(failSceneIndex);
-        }
+
+        endTriggered = true;
+        Debug.Log("[PangolinManager] End condition met. Loading scene: " + target);
+        SceneManager.LoadScene(target);
     }
 
     private string ComputeStage(int h, int happy)
@@ -140,58 +273,78 @@ public class PangolinManager : MonoBehaviour
         return "egg";
     }
 
-    // ============================
-    // ✨ GLOW (PANGOLIN ONLY)
-    // ============================
-    public void PulseGlow(Color color, float intensity, float duration)
+    private static int ToInt(object value, int fallback)
+    {
+        if (value == null) return fallback;
+        if (value is long l) return (int)l;
+        if (value is int i) return i;
+        if (value is double d) return (int)d;
+        return int.TryParse(value.ToString(), out int parsed) ? parsed : fallback;
+    }
+
+    // =========================================================
+    // GLOW
+    // =========================================================
+    public void PulseGlow(Color glowColor, float intensity, float duration)
     {
         if (glowRoutine != null) StopCoroutine(glowRoutine);
-        glowRoutine = StartCoroutine(GlowRoutine(color, intensity, duration));
+        glowRoutine = StartCoroutine(PulseGlowRoutine(glowColor, intensity, duration));
     }
 
-    private IEnumerator GlowRoutine(Color color, float intensity, float duration)
+    private IEnumerator PulseGlowRoutine(Color glowColor, float intensity, float duration)
     {
-        var renderers = GetComponentsInChildren<Renderer>(true);
-        List<Material> mats = new List<Material>();
+        if (cachedRenderers == null || cachedRenderers.Length == 0) yield break;
 
-        foreach (var r in renderers)
+        float half = Mathf.Max(0.01f, duration * 0.5f);
+
+        for (float t = 0f; t < half; t += Time.deltaTime)
         {
-            foreach (var m in r.materials)
+            float v = Mathf.Lerp(0f, intensity, t / half);
+            SetEmissionForAll(glowColor * v);
+            yield return null;
+        }
+
+        for (float t = 0f; t < half; t += Time.deltaTime)
+        {
+            float v = Mathf.Lerp(intensity, 0f, t / half);
+            SetEmissionForAll(glowColor * v);
+            yield return null;
+        }
+
+        ClearEmissionOverride();
+        glowRoutine = null;
+    }
+
+    private void SetEmissionForAll(Color emission)
+    {
+        foreach (var r in cachedRenderers)
+        {
+            if (r == null) continue;
+
+            bool supports = false;
+            var mats = r.sharedMaterials;
+            for (int i = 0; i < mats.Length; i++)
             {
-                if (m.HasProperty("_EmissionColor"))
+                if (mats[i] != null && mats[i].HasProperty(EmissionColorId))
                 {
-                    m.EnableKeyword("_EMISSION");
-                    mats.Add(m);
+                    supports = true;
+                    break;
                 }
             }
+            if (!supports) continue;
+
+            r.GetPropertyBlock(mpb);
+            mpb.SetColor(EmissionColorId, emission);
+            r.SetPropertyBlock(mpb);
         }
-
-        float half = duration / 2f;
-
-        for (float t = 0; t < half; t += Time.deltaTime)
-        {
-            SetEmission(mats, color * Mathf.Lerp(0, intensity, t / half));
-            yield return null;
-        }
-
-        for (float t = 0; t < half; t += Time.deltaTime)
-        {
-            SetEmission(mats, color * Mathf.Lerp(intensity, 0, t / half));
-            yield return null;
-        }
-
-        SetEmission(mats, Color.black);
     }
 
-    private void SetEmission(List<Material> mats, Color color)
+    private void ClearEmissionOverride()
     {
-        foreach (var m in mats)
-            m.SetColor("_EmissionColor", color);
-    }
-
-    public void AddScale(float add)
-    {
-        currentScaleMultiplier = Mathf.Clamp(currentScaleMultiplier + add, 1f, maxScaleMultiplier);
-        transform.localScale = baseScale * currentScaleMultiplier;
+        foreach (var r in cachedRenderers)
+        {
+            if (r == null) continue;
+            r.SetPropertyBlock(null);
+        }
     }
 }

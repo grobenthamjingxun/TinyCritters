@@ -16,37 +16,51 @@ public class PangolinItem : MonoBehaviour
 
     private void OnTriggerEnter(Collider other)
     {
-        if (used || !other.CompareTag(pangolinTag)) return;
+        if (used) return;
+        if (other == null || !other.CompareTag(pangolinTag)) return;
+
+        if (PangolinManager.Instance == null)
+        {
+            Debug.LogWarning("[PangolinItem] No PangolinManager.Instance found.");
+            return;
+        }
+
         used = true;
 
         int hungerDelta = 0;
         int happinessDelta = 0;
 
+        // ✅ NEW: countsAsFed determines whether we set lastFed / countsAsFed in logs
+        bool countsAsFed = false;
+
         switch (itemType)
         {
             case ItemType.Ant:
-                hungerDelta = 25;
+                hungerDelta = 45;
                 happinessDelta = 20;
+                countsAsFed = true;
                 PangolinManager.Instance.AddScale(feedScaleAdd);
                 break;
 
             case ItemType.Banana:
                 hungerDelta = 15;
                 happinessDelta = -10;
+                countsAsFed = true;
                 PangolinManager.Instance.AddScale(feedScaleAdd);
                 break;
 
             case ItemType.Ball:
                 happinessDelta = 25;
+                countsAsFed = false;
                 PangolinManager.Instance.PulseGlow(glowColor, glowIntensity, glowDuration);
                 break;
         }
 
-        // 🔥 ALWAYS LOG ITEM
         PangolinManager.Instance.ApplyItem(
             itemType.ToString().ToLower(),
             hungerDelta,
-            happinessDelta
+            happinessDelta,
+            countsAsFed
         );
 
         Destroy(gameObject);

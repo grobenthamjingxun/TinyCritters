@@ -2,9 +2,10 @@ using UnityEngine;
 using Firebase;
 using Firebase.Auth;
 using Firebase.Database;
-using Firebase.Extensions; // For ContinueWithOnMainThread
+using Firebase.Extensions;
 using System;
 using System.Collections.Generic;
+using System.Threading.Tasks;
 
 public class FirebaseManager : MonoBehaviour
 {
@@ -17,6 +18,8 @@ public class FirebaseManager : MonoBehaviour
     public bool IsReady { get; private set; }
 
     // Events for UI to subscribe to
+    public event Action OnFirebaseReady;
+
     public event Action OnLoginCompleted;
     public event Action<string> OnLoginFailed;
     public event Action OnSignUpCompleted;
@@ -24,6 +27,8 @@ public class FirebaseManager : MonoBehaviour
 
     public event Action<Dictionary<string, object>> OnPangolinDataLoaded;
     public event Action<string> OnPangolinDataLoadFailed;
+
+    private bool _initialising;
 
     private void Awake()
     {
@@ -41,10 +46,15 @@ public class FirebaseManager : MonoBehaviour
 
     private void Start()
     {
+        if (_initialising || IsReady) return;
+        _initialising = true;
+
         Debug.Log("[FirebaseManager] Checking Firebase dependencies...");
 
         FirebaseApp.CheckAndFixDependenciesAsync().ContinueWithOnMainThread(task =>
         {
+            _initialising = false;
+
             if (task.IsFaulted || task.IsCanceled)
             {
                 Debug.LogError("[FirebaseManager] CheckAndFixDependenciesAsync failed: " + task.Exception);
@@ -68,26 +78,23 @@ public class FirebaseManager : MonoBehaviour
     {
         Auth = FirebaseAuth.DefaultInstance;
         DbRef = FirebaseDatabase.DefaultInstance.RootReference;
-        IsReady = true;
 
-        Debug.Log("[FirebaseManager] Firebase initialised. Auth + Realtime Database ready.");
-
-        // Optional: keep user in sync
         Auth.StateChanged += OnAuthStateChanged;
         OnAuthStateChanged(this, null);
+
+        IsReady = true;
+        Debug.Log("[FirebaseManager] Firebase initialised. Auth + Realtime Database ready.");
+
+        OnFirebaseReady?.Invoke();
     }
 
     private void OnDestroy()
     {
         if (Auth != null)
-        {
             Auth.StateChanged -= OnAuthStateChanged;
-        }
 
         if (Instance == this)
-        {
             Instance = null;
-        }
     }
 
     private void OnAuthStateChanged(object sender, EventArgs e)
@@ -97,17 +104,14 @@ public class FirebaseManager : MonoBehaviour
         if (Auth.CurrentUser != User)
         {
             bool signedIn = Auth.CurrentUser != null;
+
             if (!signedIn && User != null)
-            {
                 Debug.Log("[FirebaseManager] Signed out: " + User.UserId);
-            }
 
             User = Auth.CurrentUser;
 
             if (signedIn)
-            {
                 Debug.Log("[FirebaseManager] Signed in: " + User.UserId);
-            }
         }
     }
 
@@ -127,7 +131,7 @@ public class FirebaseManager : MonoBehaviour
         Debug.Log("[FirebaseManager] RegisterUser() with email: " + email);
 
         Auth.CreateUserWithEmailAndPasswordAsync(email, password)
-            .ContinueWithOnMainThread(task =>
+            .ContinueWithOnMainThread(async task =>
             {
                 if (task.IsCanceled)
                 {
@@ -146,12 +150,18 @@ public class FirebaseManager : MonoBehaviour
                 User = task.Result.User;
                 Debug.Log("[FirebaseManager] ✅ Sign-Up successful: " + User.UserId);
 
-                // Create default pangolin data for this new user
-                CreatePangolinProfile();
+                // Ensure profile exists (for new users it will create it)
+                try
+                {
+                    await EnsurePangolinProfileExistsAsync();
+                }
+                catch (Exception ex)
+                {
+                    Debug.LogError("[FirebaseManager] EnsurePangolinProfileExistsAsync error: " + ex);
+                }
 
-                // Fire events
+                // IMPORTANT: don't fire OnLoginCompleted here (avoid scene load race)
                 OnSignUpCompleted?.Invoke();
-                OnLoginCompleted?.Invoke(); // Because user is also logged in after sign-up
             });
     }
 
@@ -167,7 +177,7 @@ public class FirebaseManager : MonoBehaviour
         Debug.Log("[FirebaseManager] LoginUser() with email: " + email);
 
         Auth.SignInWithEmailAndPasswordAsync(email, password)
-            .ContinueWithOnMainThread(task =>
+            .ContinueWithOnMainThread(async task =>
             {
                 if (task.IsCanceled)
                 {
@@ -185,18 +195,55 @@ public class FirebaseManager : MonoBehaviour
 
                 User = task.Result.User;
                 Debug.Log("[FirebaseManager] ✅ Logged in: " + User.UserId);
+
+                // ✅ Create profile if missing
+                try
+                {
+                    await EnsurePangolinProfileExistsAsync();
+                }
+                catch (Exception ex)
+                {
+                    Debug.LogError("[FirebaseManager] EnsurePangolinProfileExistsAsync error: " + ex);
+                    // We can still continue, but data load may fail if DB is unreachable.
+                }
+
                 OnLoginCompleted?.Invoke();
             });
     }
 
     // ===========================
-    // PANGOLIN DATA
+    // PLAYER / PANGOLIN PROFILE
     // ===========================
 
-    /// <summary>
-    /// Creates default pangolin data at /pangolins/{userId}
-    /// </summary>
-    public void CreatePangolinProfile()
+    private async Task EnsurePangolinProfileExistsAsync()
+    {
+        if (User == null)
+        {
+            Debug.LogWarning("[FirebaseManager] Ensure profile: User is null.");
+            return;
+        }
+
+        if (DbRef == null)
+        {
+            Debug.LogError("[FirebaseManager] Ensure profile: DbRef is null.");
+            return;
+        }
+
+        var pangolinNode = DbRef.Child("pangolins").Child(User.UserId);
+        DataSnapshot snapshot = await pangolinNode.GetValueAsync();
+
+        if (snapshot == null || !snapshot.Exists)
+        {
+            Debug.Log("[FirebaseManager] No pangolin profile found. Creating default profile...");
+            await CreatePangolinProfileAsync();
+        }
+        else
+        {
+            Debug.Log("[FirebaseManager] Pangolin profile exists.");
+        }
+    }
+
+    private async Task CreatePangolinProfileAsync()
     {
         if (User == null)
         {
@@ -214,34 +261,32 @@ public class FirebaseManager : MonoBehaviour
         {
             { "growthStage", "baby" },
             { "happiness", 50 },
-            { "hunger", 100 },
-            { "lastFed", DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss.fffffffZ") }
+            { "hunger", 50 },
+
+            // Use separate createdAt (better than setting lastFed immediately)
+            { "createdAtUtc", DateTime.UtcNow.ToString("o") },
+
+            // Optional defaults so your UI/logic never sees missing keys:
+            { "lastFedAtUtc", "" },
+            { "lastFedItem", "" },
+            { "lastFedHungerDelta", 0 },
+            { "lastFedHappinessDelta", 0 }
         };
 
-        DbRef.Child("pangolins").Child(User.UserId)
-            .SetValueAsync(pangolinData)
-            .ContinueWithOnMainThread(task =>
-            {
-                if (task.IsCanceled)
-                {
-                    Debug.LogError("[FirebaseManager] CreatePangolinProfile canceled.");
-                    return;
-                }
-
-                if (task.IsFaulted)
-                {
-                    Debug.LogError("[FirebaseManager] CreatePangolinProfile error: " + task.Exception);
-                    return;
-                }
-
-                Debug.Log("[FirebaseManager] ✅ Pangolin profile created for UID: " + User.UserId);
-            });
+        await DbRef.Child("pangolins").Child(User.UserId).SetValueAsync(pangolinData);
+        Debug.Log("[FirebaseManager] ✅ Pangolin profile created for UID: " + User.UserId);
     }
 
-    /// <summary>
-    /// Loads pangolin data for current user and returns in event.
-    /// </summary>
+    // ===========================
+    // LOAD PANGOLIN DATA
+    // ===========================
+
     public void LoadPangolinData()
+    {
+        _ = LoadPangolinDataAsync();
+    }
+
+    private async Task LoadPangolinDataAsync()
     {
         if (User == null)
         {
@@ -257,43 +302,39 @@ public class FirebaseManager : MonoBehaviour
             return;
         }
 
-        DbRef.Child("pangolins").Child(User.UserId)
-            .GetValueAsync()
-            .ContinueWithOnMainThread(task =>
+        // ✅ Safety: if profile is missing, create it first
+        try
+        {
+            await EnsurePangolinProfileExistsAsync();
+        }
+        catch (Exception ex)
+        {
+            Debug.LogError("[FirebaseManager] Ensure profile before load error: " + ex);
+        }
+
+        try
+        {
+            DataSnapshot snapshot = await DbRef.Child("pangolins").Child(User.UserId).GetValueAsync();
+
+            if (snapshot == null || !snapshot.Exists)
             {
-                if (task.IsCanceled)
-                {
-                    Debug.LogError("[FirebaseManager] LoadPangolinData canceled.");
-                    OnPangolinDataLoadFailed?.Invoke("Canceled.");
-                    return;
-                }
+                Debug.LogWarning("[FirebaseManager] No pangolin data exists for this user yet (even after ensure).");
+                OnPangolinDataLoadFailed?.Invoke("No pangolin data found.");
+                return;
+            }
 
-                if (task.IsFaulted)
-                {
-                    Debug.LogError("[FirebaseManager] LoadPangolinData error: " + task.Exception);
-                    OnPangolinDataLoadFailed?.Invoke(task.Exception != null ? task.Exception.Message : "Unknown error.");
-                    return;
-                }
+            var dict = new Dictionary<string, object>();
+            foreach (var child in snapshot.Children)
+                dict[child.Key] = child.Value;
 
-                DataSnapshot snapshot = task.Result;
-
-                if (!snapshot.Exists)
-                {
-                    Debug.LogWarning("[FirebaseManager] No pangolin data exists for this user yet.");
-                    OnPangolinDataLoadFailed?.Invoke("No pangolin data found.");
-                    return;
-                }
-
-                var dict = new Dictionary<string, object>();
-
-                foreach (var child in snapshot.Children)
-                {
-                    dict[child.Key] = child.Value;
-                }
-
-                Debug.Log("[FirebaseManager] ✅ Pangolin data loaded for UID: " + User.UserId);
-                OnPangolinDataLoaded?.Invoke(dict);
-            });
+            Debug.Log("[FirebaseManager] ✅ Pangolin data loaded for UID: " + User.UserId);
+            OnPangolinDataLoaded?.Invoke(dict);
+        }
+        catch (Exception ex)
+        {
+            Debug.LogError("[FirebaseManager] LoadPangolinData exception: " + ex);
+            OnPangolinDataLoadFailed?.Invoke(ex.Message);
+        }
     }
 
     // ===========================

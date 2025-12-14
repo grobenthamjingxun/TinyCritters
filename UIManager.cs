@@ -1,27 +1,58 @@
 using UnityEngine;
-using TMPro;
+using UnityEngine.UI;
 
 public class UIManager : MonoBehaviour
 {
     public static UIManager Instance;
 
-    public TMP_Text playerGrowthText;
-    public TMP_Text inventoryText;
-    public TMP_Text lastFedText;
+    [Header("Stat Sliders")]
+    [SerializeField] private Slider hungerSlider;
+    [SerializeField] private Slider happinessSlider;
+
+    [Header("Growth Stage (RawImage)")]
+    [SerializeField] private RawImage growthStageRawImage;
+    [SerializeField] private Texture2D eggTexture;
+    [SerializeField] private Texture2D babyTexture;
+    [SerializeField] private Texture2D juvenileTexture;
+    [SerializeField] private Texture2D adultTexture;
 
     private void Awake()
     {
-        if (Instance == null) Instance = this;
-        else Destroy(gameObject);
+        if (Instance == null)
+            Instance = this;
+        else
+            Destroy(gameObject);
     }
 
     public void UpdateUI(int hunger, int happiness, string growthStage)
     {
+        if (hungerSlider != null)
+            hungerSlider.value = hunger;
 
+        if (happinessSlider != null)
+            happinessSlider.value = happiness;
+
+        UpdateGrowthStageTexture(growthStage);
     }
 
-    public void ShowToast(string message)
+    private void UpdateGrowthStageTexture(string stage)
     {
-        Debug.Log("TOAST: " + message);
+        if (growthStageRawImage == null) return;
+
+        switch (stage.ToLower())
+        {
+            case "egg":
+                growthStageRawImage.texture = eggTexture;
+                break;
+            case "baby":
+                growthStageRawImage.texture = babyTexture;
+                break;
+            case "teen":
+                growthStageRawImage.texture = juvenileTexture;
+                break;
+            case "adult":
+                growthStageRawImage.texture = adultTexture;
+                break;
+        }
     }
 }
