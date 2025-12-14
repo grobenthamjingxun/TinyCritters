@@ -1,0 +1,59 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 848409ee8ba454f42a5ddff137688a27, type: 3}
+  m_Name: PangolinLibrary
+  m_EditorClassIdentifier: 
+  m_GuidLow: 4925278153327037188
+  m_GuidHigh: 8404354832586272655
+  m_DataStore:
+    m_Storage: []
+  m_Images:
+  - m_SerializedGuid:
+      m_GuidLow: 5108605159526584977
+      m_GuidHigh: 13494042681720721564
+    m_SerializedTextureGuid:
+      m_GuidLow: 5414636230591964902
+      m_GuidHigh: 2302251238108739577
+    m_Size: {x: 0, y: 0}
+    m_SpecifySize: 0
+    m_Name: Pangolin
+    m_Texture: {fileID: 0}
+  - m_SerializedGuid:
+      m_GuidLow: 4658249490153664163
+      m_GuidHigh: 11896345244140791968
+    m_SerializedTextureGuid:
+      m_GuidLow: 1996328900713351188
+      m_GuidHigh: 15803061187304480249
+    m_Size: {x: 0, y: 0}
+    m_SpecifySize: 0
+    m_Name: Ant
+    m_Texture: {fileID: 0}
+  - m_SerializedGuid:
+      m_GuidLow: 5345645976546375628
+      m_GuidHigh: 7796471164764394152
+    m_SerializedTextureGuid:
+      m_GuidLow: 15137735897925788720
+      m_GuidHigh: 16523045464709728072
+    m_Size: {x: 0, y: 0}
+    m_SpecifySize: 0
+    m_Name: Ball
+    m_Texture: {fileID: 0}
+  - m_SerializedGuid:
+      m_GuidLow: 4925734914543820750
+      m_GuidHigh: 6261045167814186686
+    m_SerializedTextureGuid:
+      m_GuidLow: 8085358981333321830
+      m_GuidHigh: 14303544712662301865
+    m_Size: {x: 0, y: 0}
+    m_SpecifySize: 0
+    m_Name: Banana
+    m_Texture: {fileID: 0}
